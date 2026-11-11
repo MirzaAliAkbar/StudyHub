@@ -28,12 +28,14 @@ class Subject(db.Model):
     name = db.Column(db.String(80), nullable=False)
     x = db.Column(db.Float)
     y = db.Column(db.Float)
+    w = db.Column(db.Float)
+    h = db.Column(db.Float)
 
     deadlines = db.relationship(
         "Deadline", backref="subject", cascade="all, delete-orphan", order_by="Deadline.exam_date",
     )
     notes = db.relationship(
-        "Note", backref="subject", cascade="all, delete-orphan", order_by="Deadline.exam_date",
+        "Note", backref="subject", cascade="all, delete-orphan", order_by="Note.created_at",
     )
 
 
@@ -57,5 +59,13 @@ class Note(db.Model):
     subject_id = db.Column(db.Integer, db.ForeignKey("subject.id"), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    x = db.Column(db.Float)
+    y = db.Column(db.Float)
+
+class BoardItem(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    kind = db.Column(db.String(16), nullable=False)
+    content = db.Column(db.Float)
     x = db.Column(db.Float)
     y = db.Column(db.Float)

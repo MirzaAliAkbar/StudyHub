@@ -16,7 +16,7 @@ def manage():
             flash("Subject names need to be 80 characters or fewer.", "warning")
         elif Subject.query.filter(
             db.func.lower(Subject.name) == name.lower(),
-            SUbject.user_id == current_user.id,
+            Subject.user_id == current_user.id,
         ).first():
             flash(f"{name} is already on your board.", "warning")
         else:
@@ -55,7 +55,7 @@ def deadlines():
             return redirect(url_for("subjects.deadlines"))
 
         try:
-            when = datetime.strptime(exam_date, "%y-%m-%d").date()
+            when = datetime.strptime(exam_date, "%Y-%m-%d").date()
         except ValueError:
             flash("That date doesn't look right.", "warning")
             return redirect(url_for("subjects.deadlines"))
@@ -75,10 +75,10 @@ def deadlines():
         d.days_left = (d.exam_date - today).days
     return render_template("subjects/deadlines.html", subjects=user_subjects, deadlines=user_deadlines)
 
-@subjects.route("/deadlines/<int:deadline_id>/delete", methods["POST"])
+@subjects.route("/deadlines/<int:deadline_id>/delete", methods=["POST"])
 @login_required
 def delete_deadline(deadline_id):
-    deadline = deadline.query.filter_by(id=deadline_id, user_id=current_user.id).first_or_404()
+    deadline = Deadline.query.filter_by(id=deadline_id, user_id=current_user.id).first_or_404()
     db.session.delete(deadline)
     db.session.commit()
     flash("Deadline removed", "success")

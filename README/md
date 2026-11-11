@@ -1,0 +1,13 @@
+# StudyHub
+
+A study OS for CIE A level students. You can use it to Track subjects adn exam deadlines, and see everything on one draggable, zoomable board. You can upload notes and it auto sorts it to ur subject category, you can solve pastpapers and get marked by an new and unique AI method and also get a error log; so you know what to improve for next time.
+
+## Run it locally
+```bash
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+python seed.py  #creates the database and a demo account
+flask --app app run --debug
+
+Open http://127.0.0.1:5000 and log in with demo / demo1234

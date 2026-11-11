@@ -10,7 +10,7 @@
 </div>
 
 {% if subjects %}
-<form method="POST" class="cad mb-4">
+<form method="POST" class="card mb-4">
     <div class="card-body">
         <div class="row g-2 align-items-end">
             <div class="col-md-4">
@@ -62,7 +62,7 @@
             </div>
         </div>
         <div class="d-flex align-items-center gap-2">
-            <span class="chip {{ 'chip-urgent' if 0 <= d.days_left <= 14 else ('chip-past' if d.days_left < 0 else '') }}">{{ 'past' if d.days_left ~ 'd'}}</span>
+            <span class="chip {{ 'chip-urgent' if 0 <= d.days_left <= 14 else ('chip-past' if d.days_left < 0 else '') }}">{{ 'past' if d.days_left < 0 else ('urgent' if d.days_left <= 14 else 'upcoming')}}</span>
             <form method="POST" action="{{ url_for('subjects.delete_deadline', deadline_id=d.id )}}">
                 <button type="submit" class="btn btn-sm btn-secondary">Delete</button>
             </form>
@@ -73,4 +73,4 @@
 {% else %}
 <p class="text-muted">No deadlines yet.</p>
 {% endif %}
-{% endbasic %}
+{% endblock %}
