@@ -17,10 +17,10 @@ with app.app_context():
 
         today = date.today()
         plan = {
-            "Mathermatics": [("P1 mock", 12, "paper"), ("P3 mock", 40, "paper")],
+            "Mathematics": [("P1 mock", 12, "paper"), ("P3 mock", 40, "paper")],
             "Physics": [("Paper 4 revision", 21, "exam")],
             "Chemistry": [("Paper 2 past papers", 33, "paper")],
-            "Computer Science": [("Porject deadline", 55, "assignment")],
+            "Computer Science": [("Project deadline", 55, "assignment")],
         }
 
         for name, items in plan.items():

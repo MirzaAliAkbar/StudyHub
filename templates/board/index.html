@@ -5,14 +5,32 @@
 <div id="board">
     <div id="viewport">
         {% for item in subject_nodes %}
-		<div class="node subject" data-kind="subject" data-id="{{ item.subject.id }}" data-x="{{ item.x }}" data-y="{{ item.y }}"{% if item.subject.w %} data-w="{{ item.subject.w|round }}" data-h="{{ item.subject.h|round }}"{% endif %} style="left: {{ item.x }}px; top: {{ item.y }}px; --nc: {{ item.color }};{% if item.subject.w %} width: {{ item.subject.w|round }}px; height: {{ item.subject.h|round }}px; {% endif %}">
-            <h3>{{ item.subject.name }}</h3>
-            <span class="badge">{{ item.subject.deadlines|length }} deadlines</span>
-            <span class="resize" data-dir="se" title="Resize"></span>
+		<div class="node subject" data-kind="subject" data-id="{{ item.subject.id }}" data-x="{{ item.x }}" data-y="{{ item.y}}" data-s="{{ item.subject.s or 1 }}" style="left: {{ item.x }}px; top: {{ item.y }}px; --nc: {{ item.color }}; transform: scale({{ item.subject.s or 1 }});">
+            <div class="node-head">
+                <span class="node-dot" style="background: {{ item.color }}"></span>
+                <h3>{{ item.subject.name }}</h3>
+                <span class="node-count">{{ item.count }}</span>
+                <span class="node-chev">▾</span>
+            </div>
+            <div class="node-body">
+                {% for group in item.groups %}
+                <div class="node-group">
+                    <div class="group-label">{{ group.label }}</div>
+                    {% for row in group.rows %}
+                    <div class="child-row">
+                        <span class="child-title">{{ row.title }}</span>
+                        <span class="child-meta">{{ row.meta }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endfor %}
+                {% if not item.groups %}<p class="node-empty">Nothing here yet.</p> {% endif %}
+                <a class="node-more" href="{{ url_for('subjects.manage') }}">Open subject -></a>
+            </div>
+            <span class="resize" title="Scale"></span>
         </div>
         {% endfor %}
-
-        {% for item in deadline_nodes %}
+        {% for item in deadline_node %}
         <div class="node deadline" data-kind="deadline" data-id="{{ item.deadline.id }}" data-x="{{ item.x }}" data-y="{{ item.y }}" style="left: {{ item.x }}px; top: {{ item.y }}px; --nc: {{ item.color }};">
             <h3>{{ item.deadline.title }}</h3>
             <div class="date">{{ item.deadline.exam_date.strftime('%d %b %Y') }}</div>
@@ -20,32 +38,42 @@
             <span class="badge">{{ 'past' if item.days < 0 else item.days ~ 'd left'}}</span>
         </div>
         {% endfor %}
-
         {% for item in note_nodes %}
-        <div class="node note" data-kind="note" data-id="{{ item.note.id }}" data-x="{{ item.x }}" data-y="{{ item.y }}" style="left: {{ item.x }}px; top: {{ item.y }}px; --nc: {{ item.color }};">
+        <div class="node note" data-kind="note" data-id="{{ item.note.id }}" data-x="{{ item.x }}" data-y="{{ item.y }}" style="left: {{ item.x }}px; top: {{ item.y }}px; -transform: scale({{ item.s or 1 }});{% if item.kind == 'note' and item.color %} background: {{ item.color }};{%  endif %}">
             <h3>{{ item.note.filename }}</h3>
             <span class="badge">{{ item.note.subject.name }}</span>
         </div>
         {% endfor %}
 
         {% for item in items %}
-        <div class="node item {{ item.kind }}" data-kind="item" data-id="{{ item.id }}" data-x="{{ item.x }}" data-y="{{ item.y }}" style="left: {{ item.x}}px; top: {{ item.y }}px;">
+        <div class="node item {{ item.kind }}" data-kind="item" data-id="{{ item.id }}" data-x="{{ item.x }}" data-y="{{ item.y }}" data-s="{{ item.s or 1 }}" style="left: {{ item.x }}px; top: {{ item.y }}px; transform: scale({{ item.s or 1 }});">
             {% if item.kind == 'image' %}
-            <img src="{{ item.content }}" alt="draggable=false">
+            <img src="{{ item.content }}" alt="{{ item.title or '' }}" draggable="false">
+            {% elif item.kind == 'video' %}
+            <video src="{{ item.content }}" controls preload="metadata">
+            </video>
+            {% elif item.kind == 'audio' %}
+            <audio src="{{ item.content }}" controls></audio>
+            {% elif item.kind == 'pdf' %}
+            <iframe class="node-pdf" src="{{ item.content }}#view=FitH" title="{{ item.title or 'PDF' }}"></iframe>
             {% elif item.kind == 'link' %}
             <a href="{{ item.content }}" target="_blank" rel="noopener">{{ item.content }}</a>
+            {% elif item.kind == 'file' %}
+            <a class="file-chip" href="{{ item.content }}" download="{{ item.title or '' }}">{{ item.title or 'File'}}</a>
             {% else %}
+            {% if item.kind == 'note' and item.title %}<h4 class="note-title">{{ item.title }}</h4>{% endif %}
             <div class="node-text">{{ item.content }}</div>
             {% endif %}
             <button class="node-del" type="button" title="Delete">x</button>
+            <span class="resize" title="Scale"></span>
         </div>
         {% endfor %}
     </div>
-    {% if not subject_nodes and not deadline_nodes and not note_nodes and not items %}
+    {% if not subject_nodes and not items %}
     <div id="empty-board">
         <div>
             <h3>Your board is empty</h3>
-            <p>Add a subject, then a deadline - thye show up here as cards.</p>
+            <p>Add a subject, then a deadline - they show up here as cards.</p>
             <a class="btn btn-primary" href="{{ url_for('subjects.manage' )}}">Add a subject</a>
         </div>
     </div>
@@ -56,6 +84,24 @@
     <button type="button" title="Add subject" onclick="location.href='{{ url_for('subjects.manage') }}'">+</button>
     <button type="button" title="Add deadline" onclick="location.href='{{ url_for('subjects.deadlines') }}'">⌛</button>
 </div>
+<div id="subject-dock" class="subject-dock">
+    <div class="dock-head">
+        <span>Subjects</span>
+        <button type="button" id="dock-toggle" title="Collapse / expand">&ndash;</button>
+    </div>
+    <input id="dock-search" class="dock-search" type="search" placeholder="Filter (Ctrl+K)">
+    <div class="dock-list">
+        {% for item in subject_nodes %}
+        <button type="button" class="dock-item" data-open-subject="{{ item.subject.id }}">
+            <span class="dock-dot" style="background: {{ item.color }}"></span>
+            <span class="dock-name">{{ item.subject.name }}</span>
+            <span class="dock-count">{{ item.count }}</span>
+        </button>
+        {% endfor %}
+        {% if not subject_nodes %}<p class="dock-empty">No subjects yet.</p>{% endif %}
+    </div>
+</div>
+
 
 <div id="taskbar">
     <div class="brand">StudyHub OS</div>
@@ -64,32 +110,53 @@
         <button type="button" class="active">Board</button>
     </div>
     <div class="controls">
-        <buttom type="button" data-theme-toggle title="Light / dark">🌙</buttom>
+        <button type="button" data-theme-toggle title="Light / dark"><img class="theme-icon" src="{{ url_for('static', filename='theme.jpeg') }}" alt=""></button>
         <button type="button" id="zoom-out" title="Zoom out">-</button>
         <button type="button" id="zoom-in" title="Zoom in">+</button>
         <button type="button" id="fit-board" title="Fit board">⤢</button>
+        <span id="save-state" class="save-state"></span>
         <a class="taskbar-link" href="{{ url_for('subjects.manage') }}">Subjects</a>
         <a class="taskbar-link" href="{{ url_for('subjects.deadlines') }}">Deadlines</a>
         <a class="taskbar-link" href="{{ url_for('auth.logout') }}">Logout</a>
     </div>
 </div>
 
+
 <div id="zoom-indicator">100%</div>
-<script id="board-data" type="application/json">{{ board_data|tojson }}</script>
+<div id="toast" class="toast" hidden>
+    <span id="toast-msg">Deleted</span>
+    <button type="button" id="toast-undo">Undo</button>
+</div>
 
 <div id="ctx-menu" class="ctx-menu" hidden>
-    <button type="button" data-add="note">Add note</button>
-    <button type="button" data-add="text">Add text</button>
-    <button type="button" data-add="link">Add link</button>
-    <button type="button" data-add="image">Add image</button>
+    <button type="button" data-add="note">Sticky note</button>
+    <button type="button" data-add="text">Plain text</button>
+    <button type="button" data-add="link">Link</button>
+    <button type="button" data-add="upload">Upload file...</button>
     <hr>
     <button type="button" data-action="fit">Fit board</button>
     <button type="button" data-action="origin">Reset view</button>
+</div>
+<div id="item-menu" class="ctx-menu" hidden>
+    <button type="button" data-item-action="edit">Edit</button>
+    <button type="button" data-item-action="duplicate">Duplicate</button>
+    <hr>
+    <button type="button" data-item-action="delete">Delete</button>
+</div>
+
+<div id="note-swatches" class="swatches" hidden>
+    <button type="button" data-color="#f6e7a9" style="background: #f6e7a8"></button>
+    <button type="button" data-color="#f7c6cf" style="background: #f7c6cf"></button>
+    <button type="button" data-color="#bfe8cb" style="background: #bfe8cb"></button>
+    <button type="button" data-color="#c2dcf7" style="background: #c2dcf7"></button>
+    <button type="button" data-color="#dfcdf5" style="background: #dfcdf7"></button>
+    
 </div>
 
 <div id="add-modal" class="add-modal" hidden>
     <form id="add-form" class="add-card">
         <h3 id="add-title">Add note</h3>
+        <input id="add-title-input" class="form-control" placeholder="Title (optional)" hidden>
         <textarea id="add-text" class="form-control" rows="4" placeholder="Type something..."></textarea>
         <input id="add-url" class="form-control" placeholder="https://...." hidden>
         <div class="add-actions">
@@ -99,19 +166,6 @@
     </form>
 </div>
 
-<aside id="inspector" class="inspector" hidden>
-    <header class="inspector-head">
-        <div>
-            <div class="inspector-kicker" id="inspector-kicker">
-                Subject
-            </div>
-            <h3 id="inspector-title"></h3>
-        </div>
-        <button type="button" id="inspector-close" title="Close">x</button>
-    </header>
-    <div class="inspector-jump"></div>
-    <div id="inspector-list"></div>
-</aside>
 
 <script>
     (() => {
@@ -125,14 +179,21 @@
         let scale = 1, offsetX = 0, offsetY = 0;
         let mode = null;        // 'pan' | 'drag' | 'pinch'
         let dragNode = null, startNX = 0, startNY = 0, grabWorld = null;
+        let resizeNode = null, resizeStart = null;
         let panStart = null;
         let lastPinch = 0;
+        let moved = false, downAt = null;
+        let zTop = 20;
         const pointers = new Map();
 
-        const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v))
+        const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+        const esc = (value) => String(value == null ? '' : value).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt', '"': '&quot;', "'": '&#39;'}[ch]));
+        
 
         function apply() {
             viewport.style.transform = `translate(${offsetX}px, ${offsetY}px) scale(${scale})`;
+            board.style.backgroundPosition = `${offsetX}px ${offsetY}px`;
+            board.style.backgroundSize = `${40 * scale}px ${40 * scale}px`;
             indicator.textContent = Math.round(scale * 100) + '%';
         }
 
@@ -165,12 +226,13 @@
             }
             let minX = Infinity, minY = Infinity, maxX = - Infinity, maxY = -Infinity;
             for (const node of nodes) {
+                const s = Number(node.dataset.s) || 1;
                 const x = Number(node.dataset.x);
                 const y = Number(node.dataset.y);
                 minX = Math.min(minX, x);
                 minY = Math.min(minY, y);
-                maxX = Math.max(maxX, x + node.offsetWidth);
-                maxY = Math.max(maxY, y + node.offsetHeight);
+                maxX = Math.max(maxX, x + node.offsetWidth * s);
+                maxY = Math.max(maxY, y + node.offsetHeight * s);
             }
             const pad = 70, bar = 64;
             const w = Math.max(maxX - minX, 1);
@@ -183,24 +245,49 @@
             apply();
         }
         function saveNode(node) {
-            fetch(`/board/node/${node.dataset.kind}/${node.dataset.id}`, {
+            const kind = node.dataset.kind;
+            const url = kind === 'item'
+                ? `/board/item/${node.dataset.id}`
+                : `/board/node/${kind}/${node.dataset.id}`;
+            const body = {
+                x: Math.round(Number(node.dataset.x)),
+                y: Math.round(Number(node.dataset.y)),
+            };
+            body.s = Number(node.dataset.s) || 1;
+            fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    x: Math.round(Number(node.dataset.x)),
-                    y: Math.round(Number(node.dataset.y)),
-                }),
+                body: JSON.stringify(body),
             }).catch(() => {});
+
         }
 
         board.addEventListener('wheel', (event) => {
+            if (event.target.closest('.node-body')) return;
             event.preventDefault();
-            zoomAt(event.clientX, event.clientY, Math.exp(-event.deltaY * 0.0015));
+            if (event.ctrlKey || event.metaKey) {
+                zoomAt(event.clientX, event.clientY, Math.exp(-event.deltaY * 0.0015));
+                return;
+            } 
+            offsetX -= event.deltaX;
+            offsetY -= event.deltaY;
+            apply();
         }, { passive: false});
+
         board.addEventListener('pointerdown', (event) => {
             if (event.pointerType === 'mouse' && event.button !==0) return;
+            
+            const handle = event.target.closest('.resize');
+            const node = event.target.closest('.node');
+            if (event.target.closest('a, .node-del, video, audio, iframe, input, textarea')) return;
+            if (node && !handle && event.target.closest('.node-body')) return;
+
+            hideMenu();
             board.setPointerCapture(event.pointerId);
+
             pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+            moved = false;
+            downAt = { x: event.clientX, y: event.clientY };
             
             if (pointers.size === 2) {
                 mode = "pinch";
@@ -209,27 +296,40 @@
                     dragNode.classList.remove('dragging');
                     dragNode = null;
                 }
+                resizeNode = null;
                 return;
             }
-            const node = event.target.closest('.node');
+
+
+            if (handle && node) {
+                mode = 'resize';
+                resizeNode = node;
+                node.style.zIndex = ++zTop;
+                resizeStart = {
+                    x: event.clientX, y: event.clientY,
+                    w: node.offsetWidth, h: node.offsetHeight,
+                    s: Number(node.dataset.s) || 1,
+                };
+                return;
+            }
             if (node) {
                 mode = 'drag';
                 dragNode = node;
                 node.classList.add('dragging');
-                startNX = Number(node.dataset.x);
-                startNY = Number(node.dataset.y);
+                node.style.zIndex = ++zTop;
+                startNX = Number(node.dataset.x) || 0;
+                startNY = Number(node.dataset.y) || 0;
                 grabWorld = toWorld(event.clientX, event.clientY);
-            } else {
-                mode = 'pan';
-                panStart = {
-                    x: event.clientX, y: event.clientY,
-                    ox: offsetX, oy: offsetY,
-                };
+                return;
             }
+            mode = 'pan';
+            panStart = { x: event.clientX, y: event.clientY, ox: offsetX, oy: offsetY };
         });
+
         board.addEventListener('pointermove', (event) => {
             if (!pointers.has(event.pointerId)) return;
-            pointers.set(ecent.pointerId, { x: event.clientX, y:event.clientY });
+            pointers.set(event.pointerId, { x: event.clientX, y:event.clientY });
+            if (downAt && Math.hypot(event.clientX - downAt.x, event.clientY - downAt.y) > 5) moved = true;
 
             if (mode === 'pinch' && pointers.size >= 2) {
                 const [a, b] = [...pointers.values()];
@@ -244,13 +344,26 @@
             if(mode === 'drag' && dragNode) {
                 const world = toWorld(event.clientX, event.clientY);
                 const nx = startNX + (world.x - grabWorld.x);
-                const ny = Math.max(0, startNY + (world.y - grabWorld.y));
-                dragNode.dataset.x = nx;
-                dragNode.dataset.y = ny;
+                const ny = startNY + (world.y - grabWorld.y);
+                dragNode.dataset.x = Math.round(nx);
+                dragNode.dataset.y = Math.round(ny);
                 dragNode.style.left = nx + 'px';
                 dragNode.style.top = ny + 'px';
                 return;
             }
+            if (mode === 'resize' && resizeNode) {
+                const dw = (event.clientX - resizeStart.x) / scale;
+                const dh = (event.clientY - resizeStart.y) / scale;
+                const grow = Math.max(
+                    dw / Math.max(resizeStart.w, 1),
+                    dh / Math.max(resizeStart.h, 1)
+                );
+                const s = clamp(resizeStart.s + grow, 0.4, 3);
+                resizeNode.dataset.s = s.toFixed(3);
+                resizeNode.style.transform = 'scale(' + s.toFixed(3) + ')';
+                return;
+            }
+
             if (mode === 'pan' && panStart) {
                 offsetX = panStart.ox + (event.clientX - panStart.x);
                 offsetY = panStart.oy + (event.clientY - panStart.y);
@@ -258,29 +371,413 @@
             }
         });
         function endPointer(event) {
-            pointers.delete(event.pointerID);
+            pointers.delete(event.pointerId);
 
             if (mode === 'drag' && dragNode) {
                 dragNode.classList.remove('dragging');
-                saveNode(dragNode);
+                if (moved) saveNode(dragNode);
+                else toggleOpen(dragNode);
                 dragNode = null;
+            } else if (mode === 'resize' && resizeNode) {
+                if (moved) saveNode(resizeNode);
+                resizeNode = null;
             }
+
             if (pointers.size === 0) {
                 mode = null;
                 panStart = null;
                 lastPinch = 0;
                 grabWorld = null;
+                downAt = null;
 
             } else if (pointers.size === 1) {
                 mode = 'pan';
                 lastPinch = 0;
-                const p = [...pointers.values()[0]];
+                const p = [...pointers.values()][0];
                 panStart = { x: p.x, y: p.y, ox: offsetX, oy: offsetY };
             }
         }
 
         board.addEventListener('pointerup', endPointer);
         board.addEventListener('pointercancel', endPointer);
+
+        /* Rightclick menu */
+        const menu = document.getElementById('ctx-menu');
+        let menuPoint = { x: 0, y: 0};
+
+        function hideMenu() { menu.hidden = true; }
+
+        function openMenu(clientX, clientY) {
+            menu.hidden = false;
+            const rect = menu.getBoundingClientRect();
+            menu.style.left = Math.min(clientX, window.innerWidth - rect.width - 12) + 'px';
+            menu.style.top = Math.min(clientY, window.innerHeight - rect.height -12) + 'px';
+            menuPoint = toWorld(clientX, clientY);
+        }
+
+        const itemMenu = document.getElementById('item-menu');
+        let menuNode = null;
+
+        function hideItemMenu() { itemMenu.hidden = true; }
+
+        board.addEventListener('contextmenu', (event) => {
+            if (event.target.closest('.node-del')) return;
+            event.preventDefault();
+
+            const node = event.target.closest('.node.item');
+            if (node) {
+                menuNode = node;
+                menu.hidden = true;
+                itemMenu.hidden = false;
+                const rect = itemMenu.getBoundingClientRect();
+                itemMenu.style.left = Math.min(event.clientX, window.innerWidth - rect.width - 12) + 'px';
+                itemMenu.style.top = Math.min(event.clientY, window.innerHeight - rect.height - 12) + 'px';
+                const editable = node.classList.contains('note') || node.classList.contains('text');
+                itemMenu.querySelector('[data-item-action="edit"]').hidden = !editable;
+                return;
+            }
+            hideItemMenu()
+            openMenu(event.clientX, event.clientY);
+        });
+
+        window.addEventListener('pointerdown', (event) => {
+            if (!event.target.closest('#ctx-menu')) hideMenu();
+            if (!event.target.closest('#item-menu')) hideItemMenu();
+        }, true);
+
+        menu.addEventListener('click', (event) => {
+            const btn = event.target.closest('button');
+            if (!btn) return;
+            if (btn.dataset.add === 'upload') { hideMenu(); pickFiles(menuPoint); return; }
+            if (btn.dataset.add) { hideMenu(); openAdd(btn.dataset.add); return; }
+            if (btn.dataset.action === 'fit') { hideMenu(); fit(); return; }
+            if (btn.dataset.action === 'origin') {
+                hideMenu();
+                scale = 1; offsetX = 0, offsetY = 0;
+                apply();
+            }
+        });
+
+        itemMenu.addEventListener('click', async (event) => {
+            const btn = event.target.closest('button');
+            if (!btn || !menuNode) return;
+            const node = menuNode;
+            const action = btn.dataset.itemAction;
+            hideItemMenu();
+
+            if (action === 'edit') {
+                startEdit(node);
+            } else if (action === 'delete') {
+                const res = await fetch('/board/item/' + node.dataset.id, { method: 'DELETE' });
+                if (res.ok) node.remove();
+            } else if (action === 'duplicate') {
+                const res = await fetch('/board/item/' + node.dataset.id + '/duplicate', { method: 'POST' });
+                if (res.ok) viewport.appendChild(makeItemNode(await res.json()));
+            }
+        });
+
+        /* add item thingy */
+        const addModal = document.getElementById('add-modal');
+        const addForm = document.getElementById('add-form');
+        const addText = document.getElementById('add-text');
+        const addUrl = document.getElementById('add-url');
+        const addTitleInput = document.getElementById('add-title-input');
+        let addKind = null;
+
+        function closeAdd() { addModal.hidden = true; addKind = null; }
+
+        const ADD_LABELS = { note: 'Add sticky note', text: 'Add text', link: 'Add link' };
+
+        function openAdd(kind) {
+            addKind = kind;
+            const isLink = kind === 'link';
+            document.getElementById('add-title').textContent = ADD_LABELS[kind] || 'Add';
+            addTitleInput.hidden = kind !== 'note';
+            addText.hidden = isLink;
+            addUrl.hidden = !isLink;
+            addText.value = "";
+            addUrl.value = "";
+            addTitleInput.value = "";
+            addText.placeholder = kind === 'note' ? 'Note text...' : 'Type something...';
+            addModal.hidden = false;
+            (isLink ? addUrl : addText).focus();
+        }
+
+        document.getElementById('add-cancel').addEventListener('click', closeAdd);
+        addModal.addEventListener('pointerdown', (event) => {
+            if (event.target.id === 'add-modal') closeAdd();
+        });
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') { closeAdd(); hideMenu(); }
+        });
+        
+        function itemBody(item) {
+            if (item.kind === 'image') {
+                const img = document.createElement('img');
+                img.src = item.content;
+                img.alt = item.title || '';
+                img.draggable = false;
+                return img;
+            }
+
+            if(item.kind === 'video') {
+                const v = document.createElement('video');
+                v.src = item.content;
+                v.controls = true;
+                v.preload = 'metadata';
+                return v;
+            }
+            if (item.kind === 'audio') {
+                const a = document.createElement('audio');
+                a.src = item.content;
+                a.controls = true;
+                return a;
+            }
+            if (item.kind === 'pdf') {
+                const f = document.createElement('iframe');
+                f.className = 'node-pdf'
+                f.src = item.content + '#view=FitH';
+                return f;
+            }
+            if (item.kind === 'link') {
+                const a = document.createElement('a');
+                a.href = item.content;
+                a.target = '_blank';
+                a.rel = 'noopener';
+                a.textContent = item.content;
+                return a;
+            }
+            if (item.kind === 'file') {
+                const a = document.createElement('a');
+                a.className = 'file-chip';
+                a.href = item.content;
+                a.download = item.title || '';
+                a.textContent = item.title || 'File';
+                return a;
+            }
+            const frag = document.createElement('div');
+            if (item.kind === 'note' && item.title) {
+                const h = document.createElement('h4');
+                h.className = 'note-title';
+                h.textContent = item.title;
+                frag.appendChild(h);
+            }
+            const body = document.createElement('div');
+            body.className = 'node-text';
+            body.textContent = item.content;
+            frag.appendChild(body);
+            return frag;
+        }
+        function makeItemNode(item) {
+            const el = document.createElement('div');
+            el.className = 'node item ' + item.kind;
+            el.dataset.kind = 'item';
+            el.dataset.id = item.id;
+            el.dataset.x = Math.round(item.x);
+            el.dataset.y = Math.round(item.y);
+            el.dataset.s = item.s || 1;
+            el.style.left = item.x + 'px';
+            el.style.top = item.y + 'px';
+            el.style.transform = 'scale(' + (item.s || 1) + ')';
+            el.appendChild(itemBody(item));
+
+            const del = document.createElement('button');
+            del.type = 'button'; del.className = 'node-del';
+            del.title = 'Delete';
+            del.textContent = 'x'
+            del.addEventListener('click', async (event) => {
+                event.stopPropagation();
+                await fetch('/board/item/' + item.id, { method: 'DELETE' });
+                el.remove();
+            });
+            el.appendChild(del);
+            
+            const grip = document.createElement('span');
+            grip.className = 'resize';
+            grip.title = 'Scale';
+            el.appendChild(grip);
+            return el;
+        }
+
+        async function postItem(payload) {
+            const res = await fetch('/board/item', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            return res.ok ? res.json() : null;
+        }
+
+        addForm.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            if (!addKind) return;
+            const isLink = addKind === 'link';
+            const payload = {
+                kind: addKind,
+                title: addTitleInput.value.trim(),
+                content: (isLink ? addUrl.value : addText.value).trim(),
+                x: Math.round(menuPoint.x),
+                y: Math.round(menuPoint.y),
+            };
+            if (!payload.content) return;
+            const item = await postItem(payload);
+            if (!item) { alert('Could not create that item.'); return; }
+            viewport.appendChild(makeItemNode(item));
+            closeAdd();
+        });
+        async function uploadFiles(files, point){
+            let n = 0;
+            for (const file of files) {
+                const data = new FormData();
+                data.append('file', file);
+                data.append('x', Math.round(point.x + n * 24));
+                data.append('y', Math.round(point.y + n * 24));
+                const res = await fetch('/board/upload', { method: 'POST', body: data });
+                if (!res.ok) { alert('Could not upload ' + file.name); continue; }
+                viewport.appendChild(makeItemNode(await res.json()));
+                n += 1;
+            }
+        }
+
+        function pickFiles(point) {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.multiple = true;
+            input.addEventListener('change', () => {
+                if (input.files && input.files.length) uploadFiles([...input.files], point);
+            });
+            input.click();
+        }
+        board.addEventListener('dragover', (event) => {
+            if (!event.dataTransfer) return;
+            event.preventDefault();
+            event.dataTransfer.dropEffect = 'copy';
+            board.classList.add('drop-active');
+        });
+        board.addEventListener('dragleave', (event) => {
+            if (!event.relatedTarget || !board.contains(event.relatedTarget)) {
+                board.classList.remove('drop-active')
+            } 
+        })
+        board.addEventListener('drop', async (event) => {
+            event.preventDefault();
+            board.classList.remove('drop-active');
+            const point = toWorld(event.clientX, event.clientY);
+            if (event.dataTransfer.files && event.dataTransfer.files.length) {
+                uploadFiles([...event.dataTransfer.files], point);
+                return;
+            }
+            const text = (event.dataTransfer.getData('text/uri-list') || event.dataTransfer.getData('text/plain') || '').trim();
+            if (!/^https?:\/\//i.test(text)) return;
+            const item = await postItem ({
+                kind: 'link', content: text,
+                x: Math.round(point.x), y: Math.round(point.y),
+            });
+            if (item) viewport.appendChild(makeItemNode(item));
+        });
+        
+        function startEdit(node) {
+            if (node.classList.contains('editing')) return;
+            if (!node.classList.contains('note') && !node.classList.contains('text')) return;
+
+            const textEl = node.querySelector('.node-text');
+            if (!textEl) return;
+            const titleEl = node.querySelector('.note-title');
+            const fields = titleEl ? [titleEl, textEl] : [textEl];
+            const original = fields.map((el) => el.textContent);
+
+            node.classList.add('editing');
+            fields.forEach((el) => { el.contentEditable = 'true'; el.spellcheck = false; });
+            textEl.focus();
+
+            let finished = false;
+            const finish = async (save) => {
+                if (finished) return;
+                    finished = true;
+                node.classList.remove('editing');
+                fields.forEach((el) => { el.contentEditable = 'false'; });
+
+                const content = textEl.textContent.trim();
+                const title = titleEl ? titleEl.textContent.trim() : '';
+                if (!save || (!content && !title )) {
+                    fields.forEach((el, i) => { el.textContent = original[i]; });
+                    return;
+                }
+                const res = await fetch('/board/item/' + node.dataset.id + '/edit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content, title }),
+                });
+                if (!res.ok) { fields.forEach((el, i) => { el.textContent = original[i]; }); return; }
+                const saved = await res.json();
+                textEl.textContent = saved.content;
+                if (titleEl) titleEl.textContent = saved.title || '';
+            };
+
+            fields.forEach((el) => {
+                el.addEventListener('keydown', (event) => {
+                    event.stopPropagation();
+                    if (event.key === 'Escape') { event.preventDefault(); finish(false); }
+                    if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); finish(true); }
+                });
+                el.addEventListener('blur', () => {
+                    setTimeout(() => {
+                        if (node.contains(document.activeElement)) return;
+                        finish(true);
+                    }, 0);
+                });
+            });
+        }
+
+        board.addEventListener('dblclick', (event) => {
+            if (event.target.closest('.node-body')) return;
+            const node = event.target.closest('.node.item');
+            if (node) startEdit(node);
+        });
+
+        function toggleOpen(node) {
+            if (node.dataset.kind !== 'subject') return;
+            node.classList.toggle('open');
+        }
+
+
+        const dock = document.getElementById('subject-dock');
+        document.getElementById('dock-toggle').addEventListener('click', () => {
+            dock.classList.toggle('collapsed');
+        });
+
+        function centerOn(node) {
+            const s = Number(node.dataset.s) || 1;
+            const x = Number(node.dataset.x) || 0;
+            const y = Number(node.dataset.y) || 0;
+            const w = node.offsetWidth * s;
+            const h = node.offsetHeight * s;
+            offsetX = board.clientWidth / 2 - (x + w / 2) * scale;
+            offsetY = (board.clientHeight - 64) / 2 - (y + h / 2) * scale;
+            apply();
+        }
+
+        /* selection, undo, keyboard, filter, save state */
+        let selected = null;
+        let nudgeTimer = null;
+
+        function select(node) {
+            if (selected === node) return;
+            if (selected && selected.isConnected) selected.classList.remove('selected');
+            selected = node;
+            if (node) node.classList.add('selected');
+        }
+
+        dock.addEventListener('click', (event) => {
+            const btn = event.target.closest('[data-open-subject]');
+            if (!btn) return;
+            const node = viewport.querySelector('.node.subject[data-id="' + btn.dataset.openSubject + '"]');
+            if (!node) return;
+            node.classList.add('open');
+            node.style.zIndex = ++zTop;
+            centerOn(node);
+        });
 
         document.getElementById('zoom-in').addEventListener('click', () => {
             zoomAt(board.clientWidth / 2, board.clientHeight / 2, 1.2);
@@ -291,6 +788,15 @@
         document.getElementById('fit-board').addEventListener(
             'click', fit
         );
+
+        viewport.querySelectorAll('.node.item .node-del').forEach((btn) => {
+            btn.addEventListener('click', async (event) => {
+                event.stopPropagation();
+                const node = btn.closest('.node.item');
+                const res = await fetch('/board/item/' + node.dataset.id, { method: 'DELETE' });
+                if (res.ok) node.remove();
+            });
+        });
         fit();
     })();
 </script>

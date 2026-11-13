@@ -25,7 +25,7 @@
 
                     <div class="collapse navbar-collapse" id="mainNav">
                         <div class="navbar-nav ms-auto align-items-lg-center gap-lg-1">
-                            <button class="btn theme-toggle me-lg-2" type="button" data-theme-toggle title="Toggle light / dark">🌙</button>
+                            <button class="btn theme-toggle me-lg-2" type="button" data-theme-toggle title="Toggle light / dark"><img class="theme-icon" src="{{ url_for('static', filename='theme.jpeg') }}" alt=""></button>
                             {% if current_user.is_authenticated %}
                                 <a class="nav-link {{ 'active' if request.endpoint == 'dashboard.index' }}" href="{{ url_for('dashboard.index')}}">Dashboard</a>
                                 <a class="nav-link {{ 'active' if request.endpoint == 'board.index' }}" href="{{ url_for('board.index')}}">Board</a>

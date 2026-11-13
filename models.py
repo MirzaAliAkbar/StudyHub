@@ -30,6 +30,7 @@ class Subject(db.Model):
     y = db.Column(db.Float)
     w = db.Column(db.Float)
     h = db.Column(db.Float)
+    s = db.Column(db.Float, default=1.0)
 
     deadlines = db.relationship(
         "Deadline", backref="subject", cascade="all, delete-orphan", order_by="Deadline.exam_date",
@@ -66,6 +67,9 @@ class BoardItem(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
     kind = db.Column(db.String(16), nullable=False)
-    content = db.Column(db.Float)
+    content = db.Column(db.String(500))
+    title = db.Column(db.Text)
     x = db.Column(db.Float)
     y = db.Column(db.Float)
+    s = db.Column(db.Float, default=1.0)
+    color = db.Column(db.String(7), default="#f637a8")

@@ -5,3 +5,4 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     AI_API_KEY = os.environ.get("AI_API_KEY", "")
     AI_API_URL = os.environ.get("AI_API_URL", "")
+    MAX_CONTENT_LENGTH = 64 *  1024 * 1024
