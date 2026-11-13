@@ -36,4 +36,3 @@ def index():
         upcoming_count=len(upcoming),
         past_count=past_count,
     )
-
