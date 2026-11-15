@@ -747,3 +747,37 @@ body:has(#board) { overflow: hidden; }
     border-radius: 4px;
     cursor: text;
 }
+
+
+/* extras */
+.toast {
+    position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 16px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 999px;
+    padding: 10px 16px; box-shadow: var(--shadow); z-index: 1080; font-size: 13px;
+}
+.toast[hidden] { display: none; }
+.toast button {
+    background: none; border: none; color: var(--accent);
+    font-weight: 600; font-size: 13px; cursor: pointer; padding: 0
+}
+
+.node.selecter { outline: 2px solid var(--accent); outline-offset: 3px; }
+.node.dim { opacity: 0.2; }
+
+.dock-search {
+    margin: 8px 8px 0; padding: 7px 10px;
+    background: var(--surface-2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px; font-size: 12px;
+}
+.dock-search:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.save-state { font-size: 11px; color: var(--muted); min-width: 54px; text-align: right; }
+.save-state.ok { color: #3f9d5c; }
+
+.swatches { display: flex; gap: 6px; padding: 8px 10px 6px; }
+.swatches button {
+    width: 20px; height: 20px; padding: 0; border-radius: 50%;
+    border: 1px solid rgba(0, 0, 0, 0.18); cursor: pointer;
+}
+.swatches[hidden] { display: none; }

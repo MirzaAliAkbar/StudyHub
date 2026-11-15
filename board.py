@@ -31,6 +31,8 @@ UPLOAD_TYPES = {
     "file": {"text", "md", "csv", "doc", "docx", "ppt", "pptx", "xls", "xlsx", "zip", "rtf"},
 }
 
+NOTE_COLORS = {"#f6e7a8", "#f7c6cf", "#bfe8cb", "#c2dcf7", "#dfcdf5"}
+
 def get_color(name):
     key = name.lower()
     for needle, color in SUBJECT_COLORS.items():
@@ -128,6 +130,24 @@ def move_node(kind, node_id):
 
 @board.route("/board/item", methods=["POST"])
 @login_required
+
+def tag_item(item):
+    """Sort one board item into a subject. Never raises, never blocks saving."""
+    subjects = Subject.query.filter_by(user_id=current_user.id).order_by(Subject.name).all()
+    guess = classify(
+        {"title": item.title, "content": item.content, "kind": item.kind},
+        [{"id": s.id, "name": s.name} for s in subjects],
+        url=current_app.config.get("JEV_API_URL", ""),
+        key=current_app.config.get("JEV_API_KEY", ""),
+        model=current_app.config.get("JEV_MODEL", "jev-latest"),
+        minimum=float(current_app.config.get("AUTO_TAG_MIN", 0.45)),
+    )
+    item.subject_id = guess["subject_id"]
+    item.tag_confidence = guess["confidence"] if guess["subject_id"] else None
+    item.auto_tagged = bool(guess["subject_id"])
+    db.session.commit()
+    return guess
+
 def create_item():
     payload = request.get_json(silent=True) or {}
     kind = payload.get("kind")
@@ -150,10 +170,24 @@ def create_item():
     except (TypeError, ValueError):
         abort(400)
 
-    item = BoardItem(kind=kind, title=title, content=content, x=x, y=y, s=1.0, user_id=current_user.id)
+    try:
+        s = min(3.0, max(0.4, float(payload.get("s") or 1.0)))
+    except (TypeError, ValueError):
+        s = 1.0
+    color = payload.get("color")
+    if kind != "note":
+        color = None
+    elif color not in NOTE_COLORS:
+        color = "#f6e7a8"
+
+    item = BoardItem(kind=kind, title=title, content=content, x=x, y=y, s=s, color=color, user_id=current_user.id)
+
+
+
     db.session.add(item)
     db.session.commit()
-    return {"id": item.id, "kind": item.kind, "title": item.title, "content": item.content, "x": item.x, "y": item.y, "s": item.s}
+    guess = tag_item(item)
+    return {"tag": guess, "id": item.id, "kind": item.kind, "title": item.title, "content": item.content, "x": item.x, "y": item.y, "s": item.s, "color": item.color,}
 
 
 @board.route("/board/item/<int:item_id>", methods=["POST"])
@@ -203,6 +237,20 @@ def edit_item(item_id):
     db.session.commit()
     return {"ok": True, "content": item.content, "title": item.title}
 
+@board.route("/board/item/<int:item_id>/color", methods=["POST"])
+@login_required
+def set_item_color(item_id):
+    payload = request.get_json(silent=True) or {}
+    item = BoardItem.query.filter_by(id=item_id, user_id=current_user.id).first_or_404()
+    if item.kind != "note":
+        abort(400)
+    color = (payload.get("color") or "").strip().lower()
+    if color not in NOTE_COLORS:
+        abort(400)
+    item.color = color
+    db.session.commit()
+    return {"ok": True, "color": item.color}
+
 @board.route("/board/item/<int:item_id>", methods=["DELETE"])
 @login_required
 def delete_item(item_id):
@@ -211,8 +259,46 @@ def delete_item(item_id):
     db.session.commit()
     return {"ok": True}
 
+def set_item_tag(item_id):
+    payload = request.get_json(silent=True) or {}
+    item = BoardItem.query.filter_by(id=item_id, user_id=current_user.id).first_or_404()
+    subject_id = payload.get("subject_id")
+    if subject_id in (None, "", 0):
+        item.subject_id = None
+    else:
+        subject = Subject.query.filter_by(id=subject_id, user_id=current_user.id).first()
+        if subject is None:
+            abort(400)
+        item.subject_id = subject.id
+    item.auto_tagged = False
+    item.tag_confidence = None
+    db.session.commit()
+    return {"ok": True, "subject_id": item.subject_id}
+@board.route("/board/item/<int:item_id>/retag", methods=["POST"])
+@login_required
+def retag_item(item_id):
+    item = BoardItem.query.filter_by(id=item_id, user_id=current_user.id).first_or_404()
+    return {"ok": True, "tag": tag_item(item)}
+
+@board.route("/board/autosort", methods=["POST"])
+@login_required
+def autosort_board():
+    items = (BoardItem.query.filter_by(user_id=current_user.id, subject_id=None).order_by(BoardItem.id).limit(40).all())
+    sorted_rows, errors = [], 0
+    for item in items:
+        guess = tag_item(item)
+        if guess["subject_id"]:
+            sorted_rows.append({
+                "id": item.id, "subject_id": item.subject_id,
+                "subject_name": guess["subject_name"], "confidence": guess["confidence"],
+            })
+        elif guess["error"]:
+            errors += 1
+    return {"ok": True, "sorted": sorted_rows, "untouched": len(items) - len(sorted_rows), "errors": errors}
+
 @board.route("/board/upload", methods=["POST"])
 @login_required
+
 def upload_file():
     file = request.files.get("file")
     if not file or not file.filename:

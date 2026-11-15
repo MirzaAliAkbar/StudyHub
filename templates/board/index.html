@@ -47,6 +47,9 @@
 
         {% for item in items %}
         <div class="node item {{ item.kind }}" data-kind="item" data-id="{{ item.id }}" data-x="{{ item.x }}" data-y="{{ item.y }}" data-s="{{ item.s or 1 }}" style="left: {{ item.x }}px; top: {{ item.y }}px; transform: scale({{ item.s or 1 }});">
+            {% if item.subkect_id and item.subject %}
+            <span class="node-tag" data-open-subjects="{{ item.subject_id }}">{{ item.subject.name }} . {{ ((item.tag_confidence or 0) * 100)|round|int }}%</span>
+            {% endif %}
             {% if item.kind == 'image' %}
             <img src="{{ item.content }}" alt="{{ item.title or '' }}" draggable="false">
             {% elif item.kind == 'video' %}
@@ -114,6 +117,7 @@
         <button type="button" id="zoom-out" title="Zoom out">-</button>
         <button type="button" id="zoom-in" title="Zoom in">+</button>
         <button type="button" id="fit-board" title="Fit board">⤢</button>
+        <button type="button" id="autosort" title="Sort untagged items into subjects">auto-sort</button>
         <span id="save-state" class="save-state"></span>
         <a class="taskbar-link" href="{{ url_for('subjects.manage') }}">Subjects</a>
         <a class="taskbar-link" href="{{ url_for('subjects.deadlines') }}">Deadlines</a>
@@ -433,6 +437,7 @@
                 itemMenu.style.left = Math.min(event.clientX, window.innerWidth - rect.width - 12) + 'px';
                 itemMenu.style.top = Math.min(event.clientY, window.innerHeight - rect.height - 12) + 'px';
                 const editable = node.classList.contains('note') || node.classList.contains('text');
+                itemMenu.querySelector('#note-swatches').hidden = !node.classList.contains('note');
                 itemMenu.querySelector('[data-item-action="edit"]').hidden = !editable;
                 return;
             }
@@ -462,17 +467,33 @@
             const btn = event.target.closest('button');
             if (!btn || !menuNode) return;
             const node = menuNode;
+            
+            if (btn.dataset.color) {
+                const color = btn.dataset.color;
+                applyColor(node, color);
+                hideItemMenu();
+                await fetch('/board/item/' + node.dataset.id + '/color', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ color: color }),
+                });
+                markSaving();
+                return;
+            }
+
             const action = btn.dataset.itemAction;
             hideItemMenu();
 
             if (action === 'edit') {
                 startEdit(node);
             } else if (action === 'delete') {
-                const res = await fetch('/board/item/' + node.dataset.id, { method: 'DELETE' });
-                if (res.ok) node.remove();
+                removeNode(node);
             } else if (action === 'duplicate') {
                 const res = await fetch('/board/item/' + node.dataset.id + '/duplicate', { method: 'POST' });
-                if (res.ok) viewport.appendChild(makeItemNode(await res.json()));
+                if (res.ok) {
+                    viewport.appendChild(makeItemNode(await res.json()));
+                    markSaving();
+                }
             }
         });
 
@@ -580,6 +601,19 @@
             el.style.left = item.x + 'px';
             el.style.top = item.y + 'px';
             el.style.transform = 'scale(' + (item.s || 1) + ')';
+            if (item.kind === 'note' && item.color) {
+                el.dataset.color = item.color;
+                el.style.background = item.color;
+            }
+            if (item.tag && item.tag.subject_id) {
+                const chip = document.createElement('span');
+                chipclassName = 'node-tag';
+                chip.dataset.openSubject = item.tag.subject_id;
+                chip.textContent = (item.tag.subject_name || 'Subject') + ' . ' + Math.round((item.tag.confidence || 0) * 100) + '%';
+                el.appendChild(chip);
+            }
+            
+
             el.appendChild(itemBody(item));
 
             const del = document.createElement('button');
@@ -588,8 +622,7 @@
             del.textContent = 'x'
             del.addEventListener('click', async (event) => {
                 event.stopPropagation();
-                await fetch('/board/item/' + item.id, { method: 'DELETE' });
-                el.remove();
+                removeNode(el);
             });
             el.appendChild(del);
             
@@ -624,6 +657,9 @@
             const item = await postItem(payload);
             if (!item) { alert('Could not create that item.'); return; }
             viewport.appendChild(makeItemNode(item));
+            const el = makeItemNode(item);
+            viewport.appendChild(el);
+            announceTag(item, el);
             closeAdd();
         });
         async function uploadFiles(files, point){
@@ -636,6 +672,8 @@
                 const res = await fetch('/board/upload', { method: 'POST', body: data });
                 if (!res.ok) { alert('Could not upload ' + file.name); continue; }
                 viewport.appendChild(makeItemNode(await res.json()));
+                viewport.appendChild(makeItemNode(data))
+                announceTag(data, el)
                 n += 1;
             }
         }
@@ -711,6 +749,7 @@
                 });
                 if (!res.ok) { fields.forEach((el, i) => { el.textContent = original[i]; }); return; }
                 const saved = await res.json();
+                markSaving();
                 textEl.textContent = saved.content;
                 if (titleEl) titleEl.textContent = saved.title || '';
             };
@@ -769,6 +808,177 @@
             if (node) node.classList.add('selected');
         }
 
+        const toast = document.getElementById('toast');
+        const toastMsg = document.getElementById('toast-msg');
+        const toastUndo = document.getElementById('toast-undo');
+        let toastTimer = null;
+        let undoAction = null;
+
+        function showToast(message, action) {
+            toastMsg.textContent = message;
+            undoAction = action || null;
+            toastUndo.hidden = !undoAction;
+            toast.hidden = false;
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(hideToast, 7000);
+        }
+        function announceTag(item, el) {
+            const tag = item.tag;
+            if (!tag || !tag.subject_id) return;
+            showToast('Sorted into ' + tag.subject_name + ' . ' + 
+                Math.round((tag.confidence || 0) * 100) + '%', async () => {
+                    await fetch('/board/item/' + item.id + '/tag', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ subject_id: null }),
+                    });
+                    const chip = el.querySelector('.node-tag');
+                    if(chip) chip.remove();
+                });
+        }
+
+        function hideToast() {
+            toast.hidden = true;
+            undoAction = null;
+        }
+
+        toastUndo.addEventListener('click', async () => {
+            const action = undoAction;
+            hideToast();
+            if (action) await action();
+        });
+        const saveState = document.getElementById('save-state');
+        let saveTimer = null;
+
+        function markSaving() {
+            saveState.textContent = 'Saving...';
+            saveState.classList.remove('ok');
+            clearTimeout(saveTimer);
+            saveTimer = setTimeout(() => {
+                saveState.textContent = 'Saved';
+                saveState.classList.add('ok');
+            }, 500);
+        }
+
+        function itemPayload(node) {
+            const match = node.className.match(/node item (\S+)/);
+            const kind = match ? match[1] : 'note';
+            const titleEl = node.querySelector('.node-title');
+            const textEl = node.querySelector('.node-text');
+            let content = '';
+            if (textEl) {
+                content = textEl.textContent.trim();
+            } else {
+                const media = node.querySelector('img, video, audio, iframe, a');
+                if (media) content = media.getAttribute('src') || media.getAttribute('href') || '';
+            }
+            let title = titleEl ? titleEl.textContent.trim() : "";
+            if (!title) {
+                const chip = node.querySelector('.file-chip');
+                if (chip) title = chip.textContent.trim();
+            }
+            return {
+                kind: kind,
+                content: content,
+                title: title,
+                x: Number(node.dataset.x) || 0,
+                y: Number(node.dataset.y) || 0,
+                s: Number(node.dataset.s) || 1,
+                color: node.dataset.color || null,
+            };
+        }
+
+        async function removeNode(node) {
+            if (!node) return;
+            const payload = itemPayload(node);
+            const rest = await fetch('/board/item/' + node.dataset.id, { method: 'DELETE' });
+            if (!res.ok) return;
+
+            const parent = node.parentNode;
+            const next = node.nextSibling;
+            if (node === selected) select(null);
+            node.remove();
+            markSaving();
+
+            const canUndo = payload.kind === 'note' || payload.kind === 'text' || payload.kind === 'link';
+            showToast('Deleted', camUndo ? async () => {
+                const created = await postItem(payload);
+                if (!created) return;
+                const fresh = makeItemNode(created);
+                parent.insertBefore(fresh, next && next.parentNode === parent ? next : null);
+            } : null);
+        }
+        
+        function nudge(node, dx, dy) {
+            node.dataset.x = (Number(node.dataset.x) || 0) + dx;
+            node.dataset.y = (Number(node.dataset.y) || 0) +dy;
+            node.style.left = node.dataset.x + 'px';
+            node.style.top = node.dataset.y + 'px';
+            clearTimeout(nudgeTimer);
+            nudgeTimer = setTimeout(() => { saveNode(node); markSaving(); }, 350);
+        }
+        
+        function applyColor(node, color) {
+            node.dataset.color = color;
+            node.style.background = color;
+        }
+
+        const dockSearch = document.getElementById('dock-search');
+
+        dockSearch.addEventListener('input', () => {
+        const q = dockSearch.value.trim().toLowerCase();
+        dock.querySelectorAll('.dock-item').forEach((btn) => {
+            btn.hidden = !!q && !btn.querySelector('.dock-name').textContent.toLowerCase().includes(q);
+        });
+        viewport.querySelectorAll('.node').forEach((node) => {
+            node.classList.toggle('dim', !!q && !node.textContent.toLowerCase(). includes(q));
+            });
+        });
+
+        dockSearch.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                dockSearch.value = '';
+                dockSearch.dispatchEvent(new Event('input'));
+                dockSearch.blur();
+            }
+        });
+
+        document.addEventListener('keydown', (event) => {
+            const el = document.activeElement;
+            const typing = !!el && (/^(INPUT|TEXTAREA|SELECT)&/.test(el.tagName) ||el.isContentEditable);
+
+            if (event.key === 'k' && (event.ctrlKey || event.metaKey)) {
+                event.preventDefault();
+                dockSearch.focus();
+                dockSearch.select();
+                return;
+            }
+            if (typing) return;
+            if (!selected || !selected.isConnected) return; 
+            
+            const step = event.shiftKey ? 1 : 10;
+            const moves = {
+                ArrowLeft: [-step, 0], ArrowRight:[step, 0],
+                ArrowUp: [0, -step], ArrowDown: [0, step],
+            };
+            if (moves[event.key]) {
+                event.preventDefault();
+                nudge(selected, moves[event.key][0], moves[event.key][1]);
+                return;
+            }
+            if (event.key === 'Delete' || event.key === 'Backspace') {
+                event.preventDefault();
+                removeNode(selected);
+            } else if (event.key === 'F2') {
+                 event.preventDefault();
+                 startEdit(selected);
+            } else if (event.key === 'Escape') {
+                select(null); 
+            }
+        });
+        
+
+
         dock.addEventListener('click', (event) => {
             const btn = event.target.closest('[data-open-subject]');
             if (!btn) return;
@@ -788,14 +998,30 @@
         document.getElementById('fit-board').addEventListener(
             'click', fit
         );
+        document.getElementById('autosort').addEventListener('click', async () => {
+            const res = await fetch('/board/autosort', { method: 'POST' });
+            if (!res.ok) return;
+        }
+
 
         viewport.querySelectorAll('.node.item .node-del').forEach((btn) => {
-            btn.addEventListener('click', async (event) => {
+            btn.addEventListener('click', (event) => {
                 event.stopPropagation();
-                const node = btn.closest('.node.item');
-                const res = await fetch('/board/item/' + node.dataset.id, { method: 'DELETE' });
-                if (res.ok) node.remove();
+                removeNode(btn.closest('.node.item'));
             });
+        });
+        board.addEventListener('pointerdown', (event) => {
+            const node = event.target.closest('.node');
+            if (node && !event.target.closest('.node-del, .resize')) select(node);
+        }, true);
+        board.addEventListener('click', (event) => {
+            const chip = event.target.closest('.node-tag');
+            if (!chip) return;
+            const node = viewport.querySelector('.node.subject[data-id="' + chip.dataset.openSubject + '"]');
+            if (!node) return;
+            node.classList.add('open');
+            node.style.zIndex = ++zTop;
+            centerOn(node);
         });
         fit();
     })();

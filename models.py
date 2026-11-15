@@ -72,4 +72,9 @@ class BoardItem(db.Model):
     x = db.Column(db.Float)
     y = db.Column(db.Float)
     s = db.Column(db.Float, default=1.0)
-    color = db.Column(db.String(7), default="#f637a8")
+    color = db.Column(db.String(7), default="#f6e7a8")
+
+    subject_id = db.Column(db.Integer, db.ForeignKey("subject.id"), nullable=True)
+    auto_tagged = db.Column(db.Boolean, default=False, nullable=False)
+    tag_confidence = db.Column(db.Float)
+    subject = db.relationship("Subject")
