@@ -42,3 +42,6 @@ Why is the work I am doing on terminal not being counted??
 OK I have decided the name, it should be called, StudyAL *IK its not great but better than studyhub*
 
 Yk lets just stuck with studyhub for now
+
+7:50 at night rn;
+I have done so much work, and rn I am not satisfied by the UI and Design, and I am so beginner at CS, I genuinely gotta redo it ALL....

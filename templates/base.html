@@ -29,6 +29,7 @@
                             {% if current_user.is_authenticated %}
                                 <a class="nav-link {{ 'active' if request.endpoint == 'dashboard.index' }}" href="{{ url_for('dashboard.index')}}">Dashboard</a>
                                 <a class="nav-link {{ 'active' if request.endpoint == 'board.index' }}" href="{{ url_for('board.index')}}">Board</a>
+                                <a class="nav-link {{ 'active' if request.endpoint == 'papers.index' }}" href="{{ url_for('papers.index')}}">Papers</a> 
                                 <a class="nav-link {{ 'active' if request.endpoint == 'subjects.manage' }}" href="{{ url_for('subjects.manage')}}">Subjects</a>
                                 <a class="nav-link" href="{{ url_for('subjects.deadlines')}}">Deadlines</a>
                                 <span class="nav-link">{{ current_user.username }}</span>
@@ -65,3 +66,5 @@
     </body>
 
 </html>
+
+

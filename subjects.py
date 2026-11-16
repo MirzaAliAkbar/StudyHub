@@ -51,7 +51,7 @@ def deadlines():
             subject = Subject.query.filter_by(id=subject_id, user_id=current_user.id).first()
 
         if not title or not subject or not exam_date:
-            flash("Title, suject and date are all required." , "warning")
+            flash("Title, subject and date are all required." , "warning")
             return redirect(url_for("subjects.deadlines"))
 
         try:
@@ -83,3 +83,6 @@ def delete_deadline(deadline_id):
     db.session.commit()
     flash("Deadline removed", "success")
     return redirect(url_for("subjects.deadlines"))
+
+
+

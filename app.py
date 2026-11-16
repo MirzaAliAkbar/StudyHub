@@ -2,6 +2,8 @@ from flask import Flask, render_template
 from config import Config
 from models import db
 from flask_login import LoginManager
+from papers import papers as papers_blueprint
+app.register_blueprint(papers_blueprint)
 
 login_manager = LoginManager()
 login_manager.login_view = "auth.login"

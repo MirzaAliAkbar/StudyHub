@@ -47,8 +47,8 @@
 
         {% for item in items %}
         <div class="node item {{ item.kind }}" data-kind="item" data-id="{{ item.id }}" data-x="{{ item.x }}" data-y="{{ item.y }}" data-s="{{ item.s or 1 }}" style="left: {{ item.x }}px; top: {{ item.y }}px; transform: scale({{ item.s or 1 }});">
-            {% if item.subkect_id and item.subject %}
-            <span class="node-tag" data-open-subjects="{{ item.subject_id }}">{{ item.subject.name }} . {{ ((item.tag_confidence or 0) * 100)|round|int }}%</span>
+            {% if item.subject_id and item.subject %}
+            <span class="node-tag" data-open-subject="{{ item.subject_id }}">{{ item.subject.name }} . {{ ((item.tag_confidence or 0) * 100)|round|int }}%</span>
             {% endif %}
             {% if item.kind == 'image' %}
             <img src="{{ item.content }}" alt="{{ item.title or '' }}" draggable="false">
@@ -117,7 +117,9 @@
         <button type="button" id="zoom-out" title="Zoom out">-</button>
         <button type="button" id="zoom-in" title="Zoom in">+</button>
         <button type="button" id="fit-board" title="Fit board">⤢</button>
-        <button type="button" id="autosort" title="Sort untagged items into subjects">auto-sort</button>
+        <button type="button" id="autosort" class="taskbar-hero" title="Sort your board with AI">
+            <span class="sort-icon">✦</span> Auto sort
+        </button>
         <span id="save-state" class="save-state"></span>
         <a class="taskbar-link" href="{{ url_for('subjects.manage') }}">Subjects</a>
         <a class="taskbar-link" href="{{ url_for('subjects.deadlines') }}">Deadlines</a>
@@ -170,6 +172,32 @@
     </form>
 </div>
 
+<div id="sort-panel" class="sort-panel" hidden>
+    <div class="sort-panel-head">
+        <div>
+            <div class="sort-panel-kicker">Auto sort</div>
+            <h3>Review before you file</h3>
+        </div>
+        <button type="button" id="sort-close" title="Close">x</button>
+    </div>
+    <div id="sort-summary" class="sort-summary"></div>
+
+    <div class="sort-tabs">
+        <button type="button" class="sort-tab active" data-filter="all">All</button>
+        <button type="button" class="sort-tab" data-filter="auto">Confident</button>
+        <button type="button" class="sort-tab" data-filter="review">Check first</button>
+        <button type="button" class="sort-tab" data-filter="skip">Unsure</button>
+    </div>
+
+    <div id="sort-list" class="sort-list"></div>
+
+    <div class="sort-panel-foot">
+        <span id="sort-count" class="sort-count"></span>
+        <div class="sort-actions">
+            <button type="button" id="sort-apply" class="btn btn-primary" disabled>Apply all</button>
+        </div>
+    </div>
+</div>
 
 <script>
     (() => {
@@ -191,7 +219,7 @@
         const pointers = new Map();
 
         const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
-        const esc = (value) => String(value == null ? '' : value).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt', '"': '&quot;', "'": '&#39;'}[ch]));
+        const esc = (value) => String(value == null ? '' : value).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[ch]));
         
 
         function apply() {
@@ -607,7 +635,7 @@
             }
             if (item.tag && item.tag.subject_id) {
                 const chip = document.createElement('span');
-                chipclassName = 'node-tag';
+                chip.className = 'node-tag';
                 chip.dataset.openSubject = item.tag.subject_id;
                 chip.textContent = (item.tag.subject_name || 'Subject') + ' . ' + Math.round((item.tag.confidence || 0) * 100) + '%';
                 el.appendChild(chip);
@@ -656,7 +684,6 @@
             if (!payload.content) return;
             const item = await postItem(payload);
             if (!item) { alert('Could not create that item.'); return; }
-            viewport.appendChild(makeItemNode(item));
             const el = makeItemNode(item);
             viewport.appendChild(el);
             announceTag(item, el);
@@ -671,10 +698,10 @@
                 data.append('y', Math.round(point.y + n * 24));
                 const res = await fetch('/board/upload', { method: 'POST', body: data });
                 if (!res.ok) { alert('Could not upload ' + file.name); continue; }
-                viewport.appendChild(makeItemNode(await res.json()));
-                viewport.appendChild(makeItemNode(data))
-                announceTag(data, el)
-                n += 1;
+                const saved = await res.json();
+                const created = makeItemNode(saved);
+                viewport.appendChild(created);
+                announceTag(saved, created);
             }
         }
 
@@ -892,7 +919,7 @@
             if (!node) return;
             const payload = itemPayload(node);
             const rest = await fetch('/board/item/' + node.dataset.id, { method: 'DELETE' });
-            if (!res.ok) return;
+            if (!rest.ok) return;
 
             const parent = node.parentNode;
             const next = node.nextSibling;
@@ -901,7 +928,7 @@
             markSaving();
 
             const canUndo = payload.kind === 'note' || payload.kind === 'text' || payload.kind === 'link';
-            showToast('Deleted', camUndo ? async () => {
+            showToast('Deleted', canUndo ? async () => {
                 const created = await postItem(payload);
                 if (!created) return;
                 const fresh = makeItemNode(created);
@@ -945,7 +972,7 @@
 
         document.addEventListener('keydown', (event) => {
             const el = document.activeElement;
-            const typing = !!el && (/^(INPUT|TEXTAREA|SELECT)&/.test(el.tagName) ||el.isContentEditable);
+            const typing = !!el && (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable);
 
             if (event.key === 'k' && (event.ctrlKey || event.metaKey)) {
                 event.preventDefault();
@@ -998,10 +1025,187 @@
         document.getElementById('fit-board').addEventListener(
             'click', fit
         );
-        document.getElementById('autosort').addEventListener('click', async () => {
-            const res = await fetch('/board/autosort', { method: 'POST' });
-            if (!res.ok) return;
+        
+        /* autosort */
+        const sortPanel = document.getElementById('sort-panel');
+        const sortList = document.getElementById('sort-list');
+        const sortApply = document.getElementById('sort-apply');
+        const sortCount = document.getElementById('sort-count');
+        let pendingSort = [];
+        let sortFilter = 'all';
+
+        const TIER_LABEL = { auto: 'Confident', review: 'Check first', skip: 'Unsure' };
+        const KIND_ICON = { note: '📝', text: '✎', link: '🔗', image: '🖼', video: '▶', audio: '♪', pdf: '📄', file: '📎' };
+
+        function probBars(row) {
+            const pairs = Object.entries(row.probabilities || {})
+                .sort((a, b) => b[1] - a[1]).slice(0, 3);
+            if (!pairs.length) return '';
+            return pairs.map(([name, p]) => 
+                '<span class="sort-prob"><b style="--p:' + Math.round(p * 100) + '%"></b>' +
+                '<span>' + esc(name) + ' ' + Math.round(p * 100) + '%</span></span>'
+            ).join('');
         }
+
+        function subjectOptions(row) {
+            const selected = row._choice != null ? String(row._choice) : '';
+            return '<option value="">Unsorted</option>' +
+                [...document.querySelectorAll('.dock-item')].map((btn) =>
+                    '<option value="' + esc(btn.dataset.openSubject) + '"' +
+                    (selected === String(btn.dataset.openSubject) ? ' selected' : '') + '>' +
+                    esc(btn.querySelector('.dock-name').textContent) + '</option>'
+                ).join(''); 
+        }
+
+        function updateApply() {
+            const chosen = pendingSort.filter((r) => r._choice !=null);
+            sortApply.disable = !chosen.length;
+            sortApply.textContent = chosen.length ? 'File ' + chosen.length + ' item(s)' : 'Apply';
+            sortCount.textContent = pendingSort.length + ' item(s) . ' +
+                pendingSort.filter((r) => r.tier === 'auto').length + ' confident . ' +
+                chosen.length + ' selected'; 
+        }
+
+        function renderSort() {
+            const visible = pendingSort.filter((r) => sortFilter === 'all' || r.tier === sortFilter);
+            sortList.innerHTML = '';
+            if (!pendingSort.length) {
+                sortList.innerHTML = '<p class="sort-empty">Everything is already filed. Add something new and run it again.</p>';
+                updateApply();
+                return;
+            }
+            if (!visible.length) sortList.innerHTML = '<p class="sort-empty">Nothing in this tab.</p>';
+            visible.forEach((row) => {
+                const i = pendingSort.indexOf(row);
+                const card = document.createElement('div');
+                card.className = 'sort-card' + (row.tier === 'skip' ? ' is-unsure' : '') +
+                    (row._choice !=null ? ' is-accepted' : '');
+                card.dataset.i = i;
+                const preview = (row.title || row.content || '').toString().slice(0, 70);
+                card.innerHTML =
+                    '<div class="sort-card-head">' +
+                        '<span class="sort-kind">' + (KIND_ICON[row.kind] || '•') + '</span>' +
+                        '<span class="sort-preview">' + esc(preview) + '</span>' +
+                        '<span class="sort-tier">' + TIER_lABEL[row.tier] + '</span>' +
+                    '</div>' +
+                    '<div class="sort-probs">' + probBars(row) + '</div>' +
+                        '<select class="sort-select" title="Subject">' + subjectOptions(row) + '</select>' +
+                        '<button type="button" class="sort-accept">Keep</button>' +
+                        '<button type="button" class="sort-skip">Unsure</button>' +
+                    '</div>' +
+                    (row.error ? '<div class="sort-error">' + esc(row.error) + '</div>' : '');
+                sortList.appendChild(card);
+            });
+            updateApply();
+        }
+
+        function openSortPanel(data) {
+            pendingSort = (data.preview || []).map((row) => {
+                row._choice = row.tier === 'auto' ? row.subject_id : null;
+                return row;
+            });
+            sortFilter = 'all';
+            document.querySelectorAll('.sort-tab').forEach((t) =>
+                t.classList.toggle('active', t.dataset.filter === 'all'));
+            const counts = { auto: 0, review: 0, skip: 0};
+            pendingSort.forEach((r) => { counts[r.tier] += 1; });
+            document.getElementById('sort-summary').innerHTML =
+                '<div class="sort-stat"><b>' + counts.auto + '</b><span>confident</span></div>' +
+                '<div class="sort-stat><b>' + counts.review + '</b><span>check first</span></div>' +
+                '<div class="sort-stat"><b>' + counts.skip + '</b><span>unsure</span></div>' +
+                '<div class="sort-stat"><b>' + (data.errors || 0) + '</b><span>errors</span></div>';
+            sortPanel.hidden = false;
+            renderSort();
+        }
+        function closeSortPanel() {
+            sortPanel.hidden = true;
+            pendingSort = [];
+        }
+
+        document.getElementById('autosort').addEventListener('click', async () => {
+            sortPanel.hidden = false;
+            sortList.innerHTML = '<p class="sort-loading">✦ Sorting with AI...</p>';
+            sortApply.disabled = true;
+            sortCount.textContent = '';
+            const res = await fetch('/board/autosort', { method: 'POST' });
+            if (!res.ok) {
+                sortList.innerHTML = '<p class="sort-empty">Sorting failed.</p>';
+                showToast('Sort failed', null);
+                return;
+            }
+            openSortPanel(await res.json());
+        });
+        document.querySelectorAll('.sort-tab').forEach((tab) => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.sort-tab').forEach((t) => t.classList.remove('active'));
+                tab.classList.add('active');
+                sortFilter = tab.dataset.filter;
+                renderSort();
+            });
+        });
+
+        sortList.addEventListener('change', (event) => {
+            const select = event.target.closest('.sort-select');
+            if (! select) return;
+            const card = select.closest('.sort-card');
+            const row = pendingSort[Number(card.dataset.i)];
+            if (!row) return;
+            row._choice = select.value ? Number(select.value) : null;
+            row.tier = row._choice == null ? 'skip' : 'auto';
+            card.classList.toggle('is-accepted', row._choice != null);
+            card.classList.toggle('is-unsure', row._choice == null);
+            updateApply();
+        });
+
+        sortList.addEventListener('click', (event) => {
+            const card = event.target.closest('.sort-card');
+            if(!card) return;
+            const row = pendingSort[Number(card.dataset.i)];
+            if (!row) return;
+            const select = card.querySelector('.sort-select');
+            if (event.target.closest('.sort-accept')) {
+                row._choice = select.value ? Number(select.value) : null;
+                row.tier = row._choice == null ? 'skip' : 'auto';
+            } else if (event.target.closest('.sort-skip')) {
+                row._choice = null;
+                row.tier = 'skip';
+                select.value = '';
+            } else {
+                return;
+            }
+            card.classList.toggle('is-accepted', row._choice != null);
+            card.classList.toggle('is-unsure', row._choice == null);
+            updateApply();
+        });
+
+        sortApply.addEventListener('click', async () => {
+            const rows = pendingSort
+                .filter((r) => r._choice !=null)
+                .map((r) => r._choice !=null)
+            if (!rows.length) return;
+            sortApply.disabled = true;
+            const res = await fetch('/board/autosort/apply', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ items: rows }),
+            });
+            if (!res.ok) { sortApply.disabled = false; showToast('Apply failed', null); return; }
+            const data = await res.json();
+            showToast('Filed ' + data.applied + ' item(s) -- undo', async () => {
+                await fetch('/board/autosort/undo', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ids: rows.map((r) => r.id) }),
+                });
+                location.reload();
+            });
+            setTimeout(() => location.reload(), 900);
+        });
+
+        document.getElementById('sort-close').addEventListener('click', closeSortPanel);
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && !sortPanel.hidden) closeSortPanel();
+        });
 
 
         viewport.querySelectorAll('.node.item .node-del').forEach((btn) => {

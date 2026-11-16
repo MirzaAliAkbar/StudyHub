@@ -78,3 +78,40 @@ class BoardItem(db.Model):
     auto_tagged = db.Column(db.Boolean, default=False, nullable=False)
     tag_confidence = db.Column(db.Float)
     subject = db.relationship("Subject")
+
+class Paper(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    subject_id = db.Column(db.Integer, db.ForeignKey("subject.id"), nullable=False)
+    title = db.Column(db.String(120), nullable=False)
+    session = db.Column(db.String(40), default="")
+    paper_number = db.Column(db.String(10), default="")
+    question_count = db.Column(db.Integer, default=1)
+    total_marks = db.Column(db.Integer,default=1)
+    mark_split = db.Column(db.Text, default="")
+    paper_path = db.Column(db.String(500))
+    scheme_path = db.Column(db.String(500))
+    scheme_text = db.Column(db.Text, default="")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    subject = db.relationship("Subject")
+    attempts = db.relationship("Attempt", backref="paper", cascade="all, delete-orphan")
+
+class Attempt(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    paper_id = db.Column(db.Integer, db.ForeignKey("paper.id"), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    answers = db.Column(db.Text, default="{}")
+    marks = db.Column(db.Text, default="[]")
+    score = db.Column(db.Float, default=0.0)
+    graded_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class Mistake(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    paper_id = db.Column(db.Integer, db.ForeignKey("paper.id"), nullable=False)
+    subject_id = db.Column(db.Integer, db.ForeignKey("subject.id"), nullable=False)
+    question_no = db.Column(db.Integer, nullable=False)
+    topic = db.Column(db.String(80), default="")
+    note = db.Column(db.String(400), default="")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)

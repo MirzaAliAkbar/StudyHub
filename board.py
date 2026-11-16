@@ -5,6 +5,7 @@ from flask import Blueprint, render_template, request, abort, current_app
 from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
 from models import db, Subject, Deadline, Note, BoardItem
+from tagging import classify
 
 board = Blueprint("board", __name__)
 
@@ -128,8 +129,18 @@ def move_node(kind, node_id):
     db.session.commit()
     return {"ok": True}
 
-@board.route("/board/item", methods=["POST"])
-@login_required
+
+def guess_item(item):
+    """Classify one item WITHOUT saving - used by the sort preview."""
+    subjects = Subject.query.filter_by(user_id=current_user.id).order_by(Subject.name).all()
+    return classify(
+        {"title": item.title, "content": item.content, "kind": item.kind},
+        [{"id": s.id, "name": s.name} for s in subjects],
+        url=current_app.config.get("JEV_API_URL", ""),
+        key=current_app.config.get("JEV_API_KEY", ""),
+        model=current_app.config.get("JEV_MODEL", "jev-latest"),
+        minimum=float(current_app.config.get("AUTO_TAG_MIN", 0.45)),
+    )
 
 def tag_item(item):
     """Sort one board item into a subject. Never raises, never blocks saving."""
@@ -148,6 +159,8 @@ def tag_item(item):
     db.session.commit()
     return guess
 
+@board.route("/board/item", methods=["POST"])
+@login_required
 def create_item():
     payload = request.get_json(silent=True) or {}
     kind = payload.get("kind")
@@ -210,7 +223,7 @@ def move_item(item_id):
 def duplicate_item(item_id):
     src = BoardItem.query.filter_by(id=item_id, user_id=current_user.id).first_or_404()
     copy = BoardItem(
-        kind=src.kind, title=src.title, content=src.content, x=(src.x or 0.0) + 28, y=(src.y or 0.0) + 28, s=src.s or 1.0, user_id=current_user.id,
+        kind=src.kind, title=src.title, content=src.content, x=(src.x or 0.0) + 28, y=(src.y or 0.0) + 28, s=src.s or 1.0, user_id=current_user.id, color=item.color, subject_id=item.subject_id, auto_tagged=item.auto_tagged, tag_confidence=item.tag_confidence,
     )
     db.session.add(copy)
     db.session.commit()
@@ -259,6 +272,8 @@ def delete_item(item_id):
     db.session.commit()
     return {"ok": True}
 
+@board.route("/board/item/<int:item_id>/tag", methods=["POST"])
+@login_required
 def set_item_tag(item_id):
     payload = request.get_json(silent=True) or {}
     item = BoardItem.query.filter_by(id=item_id, user_id=current_user.id).first_or_404()
@@ -283,18 +298,40 @@ def retag_item(item_id):
 @board.route("/board/autosort", methods=["POST"])
 @login_required
 def autosort_board():
-    items = (BoardItem.query.filter_by(user_id=current_user.id, subject_id=None).order_by(BoardItem.id).limit(40).all())
-    sorted_rows, errors = [], 0
+    force = (request.form.get("force") or request.args.get("force") or "") in ("1", "true", "on")
+    if force:
+        items = BoardItem.query.filter_by(user_id=current_user.id).order_by(BoardItem.id).limit(60).all()
+    else:
+        items = BoardItem.query.filter_by(user_id=current_user.id, subject_id=None).order_by(BoardItem.id).limit(40).all()
+
+    preview, errors = [], 0
     for item in items:
-        guess = tag_item(item)
-        if guess["subject_id"]:
-            sorted_rows.append({
-                "id": item.id, "subject_id": item.subject_id,
-                "subject_name": guess["subject_name"], "confidence": guess["confidence"],
-            })
-        elif guess["error"]:
-            errors += 1
-    return {"ok": True, "sorted": sorted_rows, "untouched": len(items) - len(sorted_rows), "errors": errors}
+        guess = guess_item(item)
+        row = {
+            "id": item.id,
+            "subject_id": guess["subject_id"],
+            "subject_name": guess["subject_name"],
+            "confidence": guess["confidence"],
+            "tier": ("auto" if guess["confidence"] >= 0.7 else "review" if guess["confidence"] >= 0.45 else "skip"),
+            "title": item.title,
+            "kind": item.kind,
+            "content": item.content,
+            "error": guess["error"],
+            "probabilities": guess.get("probabilities") or {},
+            "source": guess.get("source") or "none",
+        }
+        preview.append(row)
+        
+
+    return {
+        "ok": True,
+        "force": force,
+        "preview": preview,
+        "total": len(items),
+        "untouched": sum(1 for row in preview if not row["subject_id"]),
+        "errors": errors,
+
+    }
 
 @board.route("/board/upload", methods=["POST"])
 @login_required
@@ -325,4 +362,50 @@ def upload_file():
     item = BoardItem(kind=kind, title=raw[:120], content="/static/uploads/" + stored, x=x, y=y, s=1.0, user_id=current_user.id)
     db.session.add(item)
     db.session.commit()
-    return {"id": item.id, "kind": item.kind, "title": item.title, "content": item.content, "x": item.x, "y": item.y, "s": item.s}
+    guess = tag_item(item)
+    return { "tag": guess, "id": item.id, "kind": item.kind, "title": item.title, "content": item.content, "x": item.x, "y": item.y, "s": item.s}
+
+@board.route("/board/autosort/apply", methods=["POST"])
+@login_required
+def autosort_apply():
+    """Commit the reviewed sort choices in one transaction."""
+    payload = request.get_json(silent=True) or {}
+    rows = payload.get("items") or []
+    applied, skipped = 0, 0
+    for row in rows:
+        item = BoardItem.query.filter_by(id=row.get("id"), user_id=current_user.id).first()
+        if not item:
+            skipped += 1
+            continue
+        sid = row.get("subject_id")
+        if sid in (None, "", 0):
+            item.subject_id = None
+        else:
+            subject = Subject.query.filter_by(id=sid, user_id=current_user.id).first()
+            if subject is None:
+                skipped += 1
+                continue
+            item.subject_id = subject.id
+        item.auto_tagged = True
+        item.tag_confidence = row.get("confidence")
+        applied += 1
+    db.session.commit()
+    return {"ok": True, "applied": applied, "skipped": skipped}
+
+
+@board.route("/board/autosort/undo", methods=["POST"])
+@login_required
+def autosort_undo():
+    """Clear auto-sorted items bakc to untagged. """
+    payload = request.get_json(silent=True) or {}
+    ids = payload.get("ids") or []
+    n = 0
+    for iid in ids:
+        item = BoardItem.query.filter_by(id=iid, user_id=current_user.id).first()
+        if item and item.auto_tagged:
+            item.subject_id = None
+            item.auto_tagged = False
+            item.tag_confidence = None
+            n += 1
+    db.session.commit()
+    return {"ok": True, "reverted": n}
