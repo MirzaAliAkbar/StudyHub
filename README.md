@@ -1,7 +1,7 @@
 # StudyHub
 A study OS for CIE A level students
 
-<img width="1280" height="720" alt="studyhub-board" src="" />
+<img width="1280" height="720" alt="studyhub-board" src="https://github.com/user-attachments/assets/f89ba772-2066-48b7-8555-df0101b10512" />
 
 
 ## About the App
