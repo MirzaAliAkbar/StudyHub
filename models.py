@@ -89,6 +89,7 @@ class Paper(db.Model):
     question_count = db.Column(db.Integer, default=1)
     total_marks = db.Column(db.Integer,default=1)
     mark_split = db.Column(db.Text, default="")
+    questions = db.Column(db.Text, default="[]")
     paper_path = db.Column(db.String(500))
     scheme_path = db.Column(db.String(500))
     scheme_text = db.Column(db.Text, default="")
@@ -104,6 +105,7 @@ class Attempt(db.Model):
     answers = db.Column(db.Text, default="{}")
     marks = db.Column(db.Text, default="[]")
     score = db.Column(db.Float, default=0.0)
+    total = db.Column(db.Float, default=0.0)
     graded_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 class Mistake(db.Model):

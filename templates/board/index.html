@@ -1059,7 +1059,7 @@
 
         function updateApply() {
             const chosen = pendingSort.filter((r) => r._choice !=null);
-            sortApply.disable = !chosen.length;
+            sortApply.disabled = !chosen.length;
             sortApply.textContent = chosen.length ? 'File ' + chosen.length + ' item(s)' : 'Apply';
             sortCount.textContent = pendingSort.length + ' item(s) . ' +
                 pendingSort.filter((r) => r.tier === 'auto').length + ' confident . ' +
@@ -1086,9 +1086,10 @@
                     '<div class="sort-card-head">' +
                         '<span class="sort-kind">' + (KIND_ICON[row.kind] || '•') + '</span>' +
                         '<span class="sort-preview">' + esc(preview) + '</span>' +
-                        '<span class="sort-tier">' + TIER_lABEL[row.tier] + '</span>' +
+                        '<span class="sort-tier">' + TIER_LABEL[row.tier] + '</span>' +
                     '</div>' +
                     '<div class="sort-probs">' + probBars(row) + '</div>' +
+                    '<div class="sort-card-actions">' +
                         '<select class="sort-select" title="Subject">' + subjectOptions(row) + '</select>' +
                         '<button type="button" class="sort-accept">Keep</button>' +
                         '<button type="button" class="sort-skip">Unsure</button>' +
@@ -1097,6 +1098,7 @@
                 sortList.appendChild(card);
             });
             updateApply();
+            
         }
 
         function openSortPanel(data) {
@@ -1180,8 +1182,8 @@
 
         sortApply.addEventListener('click', async () => {
             const rows = pendingSort
-                .filter((r) => r._choice !=null)
-                .map((r) => r._choice !=null)
+                .filter((r) => r._choice != null)
+                .map((r) => ({ id: r.id, subject_id: r._choice, confidence: r.confidence }));
             if (!rows.length) return;
             sortApply.disabled = true;
             const res = await fetch('/board/autosort/apply', {

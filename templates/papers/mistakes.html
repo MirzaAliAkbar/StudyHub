@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Mistake log{% endblock %}
+{% block content %}
+<div class="container py-3">
+    <h1 class="h3">Mistake log</h1>
+    <ul class="list-group">
+        {% for m in mistakes %}
+        <li class="list-group-item"><b>Q{{ m.question_no }}</b> {{ m.note }}</li>
+        {% else %}<p class="text-muted">Nothing logged yet.</p>{% endfor %}
+    </ul>
+    <a class="btn btn-link mt-3" href="{{ url_for('papers.index') }}">Back to papers</a>
+</div>
+{% endblock %}

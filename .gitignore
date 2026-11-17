@@ -17,4 +17,5 @@ instance/
 .idea/
 
 # Uploaded Files
-static/uploads/static/uploads/
+static/uploads/
+static/papers/

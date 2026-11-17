@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Past papers{% endblock %}
+{% block content %}
+<div class="container py-3">
+    <h1 class="h3">Past papers</h1>
+    <p class="text-muted">Pick a syllabus, year and component. The paper and its mark scheme are fetched and split into questions for you.</p>
+
+    <form method="post" action="{{ url_for('papers.fetch') }}" class="card card-body mb-4">
+        <div class="row g-2 align-items-end">
+            <div class="col-md-4">
+                <label class="form-label small">Subject</label>
+                <select class="form-select" name="subject_id" id="fetch-subject" required>
+                    {% for s in subjects %}
+                    <option value="{{ s.id }}" data-code="{{ codes.get(s.id, '') }}">{{ s.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small">Syllabus</label>
+                <input class="form-control" name="code" id="fetch-code" placeholder="9702" maxlength="4">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small">Year</label>
+                <input class="form-control" type="number" name="year" value="2023" min="2005" max="2030">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small">Session</label>
+                <select class="form-select" name="session">
+                    <option value="a">Any</option>
+                    <option value="s">May/June</option>
+                    <option value="w">Oct/Nov</option>
+                    <option value="m">Feb/March</option>
+                </select>
+            </div>
+            <div class="col-md-1">
+                <label class="form-label small">Paper</label>
+                <input class="form-control" name="component" placeholder="42" required>
+            </div>
+            <div class="col-md-1">
+                <button class="btn btn-primary w-100" type="submit">Fetch</button>
+            </div>
+        </div>
+        <p class="text-muted small mt-2 mb-0">Needs <code>pdftotext</code> (poppler-utils). Scanned papers fall back to OCR through the AI key.</p>
+    </form>
+
+    <div class="list-group">
+        {% for p in papers %}
+        <a class="list-group-item list-group-item-action d-flex justify-content-between" href="{{ url_for('papers.detail', paper_id=p.id) }}">
+            <span><b>{{ p.title }}</b> <span class="text-muted">· {{ p.subject.name }} · {{ p.session }} · {{ p.question_count }}q / {{ p.total_marks }}m</span></span>
+            {% if attempts.get(p.id) %}<span class="badge bg-success">{{ attempts[p.id].score }}/{{ attempts[p.id].total }}</span>{% endif %}
+        </a>
+        {% else %}<p class="text-muted">No papers yet.</p>{% endfor %}
+    </div>
+    <a class="btn btn-link mt-3" href="{{ url_for('papers.mistakes') }}">Mistake log</a>
+
+    <details class="mt-4">
+        <summary class="text-muted small">Add a paper by hand instead</summary>
+        <form method="post" action="{{ url_for('papers.create') }}" enctype="multipart/form-data" class="card card-body mt-2">
+            <div class="row g-2">
+                <div class="col-md-4"><input class="form-control" name="title" placeholder="Paper title" required></div>
+                <div class="col-md-3"><select class="form-select" name="subject_id" required>
+                    {% for s in subjects %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
+                </select></div>
+                <div class="col-md-2"><input class="form-control" name="session" placeholder="Session"></div>
+                <div class="col-md-1"><input class="form-control" name="paper_number" placeholder="12"></div>
+                <div class="col-md-1"><input class="form-control" type="number" min="1" max="30" name="question_count" value="6" title="Questions"></div>
+                <div class="col-md-1"><input class="form-control" type="number" min="1" max="200" name="total_marks" value="60" title="Total marks"></div>
+            </div>
+            <div class="row g-2 mt-2">
+                <div class="col-md-4"><input class="form-control" type="file" name="paper_file" accept="application/pdf"></div>
+                <div class="col-md-4"><input class="form-control" type="file" name="scheme_file" accept="application/pdf"></div>
+                <div class="col-md-2"><input class="form-control" name="mark_split" placeholder="marks: 3,5,4"></div>
+                <div class="col-md-2"><textarea class="form-control" name="scheme_text" rows="2" placeholder="Or paste mark scheme text"></textarea></div>
+            </div>
+            <button class="btn btn-secondary mt-3" type="submit">Add paper</button>
+        </form>
+    </details>
+</div>
+<script>
+    const subjectSelect = document.getElementById('fetch-subject');
+    const codeInput = document.getElementById('fetch-code');
+    function fillCode() {
+        const option = subjectSelect.selectedOptions[0];
+        if (option && !codeInput.value) codeInput.value = option.dataset.code || '';
+    }
+    subjectSelect.addEventListener('change', () => { codeInput.value = ''; fillCode(); });
+    fillCode();
+</script>
+{% endblock %}

@@ -44,4 +44,6 @@ OK I have decided the name, it should be called, StudyAL *IK its not great but b
 Yk lets just stuck with studyhub for now
 
 7:50 at night rn;
-I have done so much work, and rn I am not satisfied by the UI and Design, and I am so beginner at CS, I genuinely gotta redo it ALL....
+I have done so much work, and rn I am not satisfied by the UI and Design, and I am not bad at CS, I genuinely gotta redo it ALL....
+
+8 days!!!, and 40 hours!!!, I am done with time, and project is good as prototype!!, now I can finally ship it, adn then i'll give hackathon invite!!, lets go.

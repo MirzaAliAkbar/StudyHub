@@ -2,8 +2,7 @@ from flask import Flask, render_template
 from config import Config
 from models import db
 from flask_login import LoginManager
-from papers import papers as papers_blueprint
-app.register_blueprint(papers_blueprint)
+
 
 login_manager = LoginManager()
 login_manager.login_view = "auth.login"
@@ -34,6 +33,9 @@ def create_app(config_class=Config):
     from board import board as board_blueprint
     app.register_blueprint(board_blueprint)
 
+    from papers import papers as papers_blueprint
+    app.register_blueprint(papers_blueprint)
+
     with app.app_context():
         db.create_all()
 
@@ -50,3 +52,5 @@ def create_app(config_class=Config):
 
 if __name__ == "__main__":
     create_app().run(debug=True)
+
+    

@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}{{ paper.title }}{% endblock %}
+{% block content %}
+<div class="container py-3">
+    <h1 class="h4">{{ paper.title }}</h1>
+    <p class="text-muted small">{{ paper.subject.name }} · {{ paper.question_count }} questions · {{ paper.total_marks }} marks</p>
+    <div class="row g-3">
+        <div class="col-lg-6">
+            {% if paper.paper_path %}
+            <iframe src="{{ paper.paper_path }}#view=FitH" style="width:100%;height:75vh;border:1px solid var(--border);border-radius:12px"></iframe>
+            {% else %}<p class="text-muted">No PDF attached.</p>{% endif %}
+        </div>
+        <div class="col-lg-6">
+            <form id="attempt-form">
+                {% for q in questions %}
+                <div class="mb-3">
+                    <label class="form-label small d-flex justify-content-between">
+                        <span>Question {{ q.n }}</span>
+                        <span class="text-muted">[{{ q.marks or '?' }} marks]</span>
+                    </label>
+                    <div class="paper-question small">{{ q.text }}</div>
+                    <textarea class="form-control mt-2" rows="3" name="q{{ q.n }}" placeholder="Your answer"></textarea>
+                </div>
+                {% endfor %}
+                <button class="btn btn-primary" type="submit">Mark with Jev</button>
+                <p id="attempt-result" class="mt-2"></p>
+                <ul id="attempt-marks" class="small"></ul>
+            </form>
+            {% if attempt %}
+            <p class="text-muted mt-3">Last attempt: {{ attempt.score }}/{{ attempt.total }}</p>
+            {% endif %}
+            {% if mistakes %}
+            <h2 class="h6 mt-4">Mistakes on this paper</h2>
+            <ul class="small">{% for m in mistakes %}<li>Q{{ m.question_no }}: {{ m.note }}</li>{% endfor %}</ul>
+            {% endif %}
+        </div>
+    </div>
+</div>
+<script>
+document.getElementById('attempt-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const answers = {};
+    document.querySelectorAll('#attempt-form textarea').forEach((box) => {
+        answers[box.name.slice(1)] = box.value;
+    });
+    const button = event.target.querySelector('button');
+    button.disabled = true;
+    button.textContent = 'Marking...';
+    const res = await fetch('/papers/{{ paper.id }}/attempt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ answers }),
+    });
+    button.disabled = false;
+    button.textContent = 'Mark with Jev';
+    if (!res.ok) {
+        document.getElementById('attempt-result').textContent = 'Marking failed.';
+        return;
+    }
+    const data = await res.json();
+    document.getElementById('attempt-result').textContent =
+        data.score + '/' + data.total + ' (' + data.percent + '%)';
+    document.getElementById('attempt-marks').innerHTML = data.marks.map((m) =>
+        '<li>Q' + m.q + ': ' + m.awarded + '/' + m.max + ' — ' + (m.reason || '') + '</li>'
+    ).join('');
+});
+</script>
+{% endblock %}

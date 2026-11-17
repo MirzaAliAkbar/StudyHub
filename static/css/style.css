@@ -921,3 +921,15 @@ body:has(#board) { overflow: hidden; }
 .sort-tier { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--accent); white-space: nowrap; }
 .sort-select { flex: 1; min-width: 0; padding: 4px 8px; border-radius: 8px; font-size: 12px; background: var(--surface); color: var(--text); border: 1px solid var(--border); }
 .sort-error  { font-size: 11px; color: #f87171 }
+
+
+/* past paper question text */
+.paper-question {
+    white-space: pre-wrap;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+    max-height: 220px;
+    overflow-y: auto;
+}

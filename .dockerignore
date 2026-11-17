@@ -1,0 +1,12 @@
+.git
+venv
+.venv
+__pycache__
+*.py[cod]
+instance
+*.sqlite
+.env
+.freebuff
+static/uploads
+static/papers
+README
