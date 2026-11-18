@@ -37,7 +37,7 @@ A study OS for CIE A level students
 - CAIE past paper archive for fetching papers
 - Docker and gunicorn for deployment
 
-##Feature List
+## Feature List
   - We have proper auth, signup and login with password hashing
   - We have subjects management and deadlines with countdown
   - We have a big board/OS vibe, pan/zoom/move, you can drag things around
